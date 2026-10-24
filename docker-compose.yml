@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-catalogue}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-catalogue_local_only}
+      POSTGRES_DB: ${POSTGRES_DB:-catalogue}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - catalogue_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: catalogue_test
+      POSTGRES_PASSWORD: catalogue_test_local_only
+      POSTGRES_DB: catalogue_test
+    ports:
+      - "${POSTGRES_TEST_PORT:-5433}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U catalogue_test -d catalogue_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  catalogue_postgres_data:
