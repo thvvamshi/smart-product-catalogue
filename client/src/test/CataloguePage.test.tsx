@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CataloguePage } from "../pages/CataloguePage";
 import type { Product, ProductResponse } from "../types/product";
+import { getLastIntersectionObserver, triggerIntersection } from "./intersection-observer.mock";
 
 const makeProduct = (id: number, name = `Product ${id}`): Product => ({
   id: String(id), sku: `TEST-${id}`, name, description: "Clear sound", brand: "Aster",
@@ -16,34 +17,17 @@ const response = (data: Product[], nextCursor: string | null = null): ProductRes
 const ok = (body: ProductResponse) => ({ ok: true, json: async () => body }) as Response;
 const batch = (start: number, length = 20) => Array.from({ length }, (_, index) => makeProduct(start + index));
 
-let observerCallback: IntersectionObserverCallback;
-let observerOptions: IntersectionObserverInit | undefined;
-class MockIntersectionObserver {
-  readonly root = null;
-  readonly rootMargin: string;
-  readonly thresholds: readonly number[] = [0];
-  constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
-    observerCallback = callback;
-    observerOptions = options;
-    this.rootMargin = typeof options?.rootMargin === "string" ? options.rootMargin : "0px";
-  }
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-  takeRecords(): IntersectionObserverEntry[] { return []; }
-}
-
 function Location() { return <output data-testid="location">{useLocation().search}</output>; }
 function renderPage(initial = "/") {
   return render(<MemoryRouter initialEntries={[initial]}><Routes><Route path="/" element={<><CataloguePage /><Location /></>} /></Routes></MemoryRouter>);
 }
-function intersect() {
-  act(() => observerCallback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver));
+async function intersect() {
+  await waitFor(() => expect(getLastIntersectionObserver().targets.size).toBe(1));
+  act(() => triggerIntersection());
 }
 
 describe("CataloguePage infinite scrolling", () => {
   beforeEach(() => {
-    vi.stubGlobal("IntersectionObserver", MockIntersectionObserver);
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(ok(response(batch(1)))));
   });
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -63,8 +47,8 @@ describe("CataloguePage infinite scrolling", () => {
     vi.mocked(fetch).mockResolvedValueOnce(ok(response(batch(1), "CURSOR_20"))).mockResolvedValueOnce(ok(response(batch(21))));
     renderPage();
     await screen.findByText("Product 20");
-    expect(observerOptions?.rootMargin).toBe("320px 0px");
-    intersect();
+    expect(getLastIntersectionObserver().rootMargin).toBe("320px 0px");
+    await intersect();
     expect(await screen.findByText("Product 40")).toBeInTheDocument();
     expect(screen.getByText("Product 1")).toBeInTheDocument();
     expect(screen.getByText("40 products loaded")).toBeInTheDocument();
@@ -77,10 +61,12 @@ describe("CataloguePage infinite scrolling", () => {
       .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveMore = resolve; }));
     renderPage();
     await screen.findByText("Product 20");
-    intersect();
-    intersect();
+    await intersect();
+    await intersect();
     expect(fetch).toHaveBeenCalledTimes(2);
     await act(async () => { resolveMore?.(ok(response(batch(21)))); await Promise.resolve(); });
+    expect(await screen.findByText("Product 40")).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it("shows empty and populated end states separately", async () => {
@@ -100,7 +86,7 @@ describe("CataloguePage infinite scrolling", () => {
       .mockResolvedValueOnce(ok(response(batch(21))));
     renderPage();
     await screen.findByText("Product 20");
-    intersect();
+    await intersect();
     expect(await screen.findByText("Load more failed")).toBeInTheDocument();
     expect(screen.getByText("Product 1")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Try loading more" }));
@@ -130,7 +116,7 @@ describe("CataloguePage infinite scrolling", () => {
       .mockResolvedValueOnce(ok(response([makeProduct(101, "Filtered Result")])));
     renderPage();
     await screen.findByText("Product 20");
-    intersect();
+    await intersect();
     await userEvent.selectOptions(screen.getByLabelText("Brand"), "Aster");
     expect(await screen.findByText("Filtered Result")).toBeInTheDocument();
     await act(async () => { resolveOld?.(ok(response([makeProduct(21, "Stale Append")]))); await Promise.resolve(); });
@@ -142,7 +128,7 @@ describe("CataloguePage infinite scrolling", () => {
       .mockResolvedValueOnce(ok(response([makeProduct(2), makeProduct(3), makeProduct(3)])));
     renderPage();
     await screen.findByText("Product 2");
-    intersect();
+    await intersect();
     await screen.findByText("Product 3");
     expect(screen.getAllByText("Product 2")).toHaveLength(1);
     expect(screen.getAllByText("Product 3")).toHaveLength(1);
