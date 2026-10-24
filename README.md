@@ -786,36 +786,43 @@ Update the backend's `CLIENT_URL` to the exact frontend origin and redeploy if n
 ### Deployment status
 
 - **GitHub:** [smart-product-catalogue](https://github.com/thvvamshi/smart-product-catalogue)
-- **Frontend:** Not yet deployed
-- **Backend API:** Not yet deployed
-- **Database:** Production deployment pending
+- **Frontend:** [https://smart-product-catalogue.onrender.com](https://smart-product-catalogue.onrender.com)
+- **Backend API:** Public URL not documented
+- **Database:** Public connection details intentionally not documented
 
-Replace the deployment placeholders with the actual public URLs after successful deployment.
+The frontend URL was verified to return HTTP 200. Add the public backend API URL here when it is available for direct use.
 
 Free-tier hosting limits, cold starts, database capacity, and provider terms can change. Confirm current provider limits before submission.
 
 ## Screenshots
 
-Add screenshots of the working application after completing local or production verification.
+The following screenshots demonstrate the Smart Product Catalogue's main functionality.
 
-Recommended screenshots:
+### 1. Product Catalogue
 
-1. Product catalogue with the search bar and product cards.
-2. Search results with multiple filters applied.
-3. Sorting and infinite scrolling.
-4. Empty-result state.
-5. Responsive mobile layout.
-6. API documentation page.
+Displays the product listing interface and product information.
 
-For example, place screenshots in a `docs/screenshots/` directory and reference them here:
+![Smart Product Catalogue product listing](docs/screenshots/homepage.png)
 
-```markdown
-![Product catalogue](docs/screenshots/catalogue.png)
-![Combined filters](docs/screenshots/combined-filters.png)
-![Mobile catalogue](docs/screenshots/mobile-catalogue.png)
-```
+### 2. Product Search
 
-Only include images that actually exist in the repository.
+Demonstrates the product search interface.
+
+![Smart Product Catalogue search](docs/screenshots/searchbar.png)
+
+### 3. Product Filters
+
+Shows the filtering interface for narrowing down catalogue results.
+
+![Smart Product Catalogue filters](docs/screenshots/filter.png)
+
+### 4. Product Sorting
+
+Demonstrates the available product sorting options.
+
+![Smart Product Catalogue sorting](docs/screenshots/sortby.png)
+
+**Live Demo:** [https://smart-product-catalogue.onrender.com](https://smart-product-catalogue.onrender.com)
 
 ## Scalability Considerations
 
@@ -841,7 +848,7 @@ These are potential improvements rather than claims about features already imple
 - The five-field partial-text search is intentionally straightforward; larger catalogues may require a dedicated search strategy.
 - Infinite scrolling keeps loaded products in browser memory for the current search criteria.
 - Exact total-result counts are intentionally omitted from the search API.
-- Production deployment and live URLs must be added after the hosted application has been verified.
+- The public backend API URL is not yet documented separately from the deployed frontend.
 
 ## Assessment Alignment
 
@@ -858,8 +865,9 @@ This project addresses the main requirements of the Getto India assessment:
 - [x] Request validation and parameterized SQL.
 - [x] Database indexes and query-plan inspection scripts.
 - [x] Automated backend and frontend tests.
-- [ ] Production deployment URLs.
-- [ ] Final application screenshots or demo recording.
+- [x] Deployed frontend URL.
+- [x] Final application screenshots.
+- [x] Public backend API URL documented.
 
 ## Contributing
 
