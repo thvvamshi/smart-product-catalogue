@@ -1,0 +1,1 @@
+const key='smart-catalogue-cart-session';export function guestSession(){let value=sessionStorage.getItem(key);if(!value){value=`guest_${typeof crypto.randomUUID==='function'?crypto.randomUUID().replaceAll('-',''):Math.random().toString(36).slice(2).padEnd(24,'x')}`;sessionStorage.setItem(key,value)}return value}

@@ -1,0 +1,7 @@
+import type {NextFunction,Request,Response} from 'express';import * as service from '../services/discovery.service.js';import type {DiscoveryQuery} from '../types/discovery.types.js';
+export async function search(_r:Request,res:Response,next:NextFunction){try{return res.json(await service.discover(res.locals.validatedQuery as DiscoveryQuery))}catch(e){next(e)}}
+export async function detail(_r:Request,res:Response,next:NextFunction){try{const value=await service.productDetail((res.locals.validatedParams as {productId:string}).productId,res.locals.validatedQuery);return value?res.json(value):res.status(404).json({error:{code:'NOT_FOUND',message:'Product not found'}})}catch(e){next(e)}}
+export async function suggestions(_r:Request,res:Response,next:NextFunction){try{return res.json(await service.getSuggestions(res.locals.validatedQuery))}catch(e){next(e)}}
+export async function categories(_r:Request,res:Response,next:NextFunction){try{return res.json(await service.categories())}catch(e){next(e)}}
+export async function filters(_r:Request,res:Response,next:NextFunction){try{return res.json(await service.filters(res.locals.validatedQuery))}catch(e){next(e)}}
+export async function variantStores(_r:Request,res:Response,next:NextFunction){try{return res.json(await service.getVariantStores((res.locals.validatedParams as {variantId:string}).variantId,res.locals.validatedQuery))}catch(e){next(e)}}

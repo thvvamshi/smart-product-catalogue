@@ -1,0 +1,17 @@
+import * as model from "../models/delivery.model.js";
+export const createAgent = model.createAgent;
+export const listAgents = model.listAgents;
+export const getAgent = model.getAgent;
+export const patchAgent = model.patchAgent;
+export const setAvailability = model.setAvailability;
+export const listTasks = model.listTasks;
+export const getTask = model.getTask;
+export const assign = model.assign;
+export const agentTasks = model.agentTasks;
+export const transitionAgent = model.transitionAgent;
+export const complete = model.complete;
+export const fail = model.fail;
+export const customerTasks = model.customerTasks;
+export const customerTracking = model.customerTracking;
+export const diagnostics = model.diagnostics;
+export const updateLocation = model.updateLocation;

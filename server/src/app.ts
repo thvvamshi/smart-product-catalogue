@@ -18,11 +18,9 @@ app.use(helmet());
 
 app.use(
   cors({
-    origin:
-      env.NODE_ENV === "production"
-        ? false
-        : env.CLIENT_URL.split(",").map((value) => value.trim()),
-    methods: ["GET"],
+    origin: env.CLIENT_URL.split(",").map((value) => value.trim()),
+    methods: ["GET", "POST", "PATCH", "DELETE"],
+    allowedHeaders: ["Content-Type", "X-Cart-Session", "X-Store-Operator", "X-Dispatch-Identity", "X-Agent-Identity", "Idempotency-Key"],
   }),
 );
 

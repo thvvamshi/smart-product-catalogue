@@ -25,3 +25,10 @@ export function validateParam(name: string, schema: ZodType): RequestHandler {
     }
   };
 }
+
+export function validateBody(schema: ZodType): RequestHandler {
+  return (req, res, next) => {
+    try { res.locals.validatedBody = schema.parse(req.body); next(); }
+    catch (error) { next(error); }
+  };
+}

@@ -1,0 +1,3 @@
+export type DeliveryLocation = { latitude: number; longitude: number; accuracyMeters: number; capturedAt: string; receivedAt: string; locationFresh: boolean };
+export type DeliveryTask = { id: string; taskNumber: string; storeOrderId: string; customerOrderId?: string; status: string; agentCode?: string; agentName?: string; failureReason?: string | null; assignedAt?: string | null; pickedUpAt?: string | null; deliveredAt?: string | null; pickupSnapshot?: Record<string, unknown>; customerAddressSnapshot?: Record<string, unknown>; location?: DeliveryLocation | null };
+export type DeliveryAgent = { id: string; agentCode: string; name: string; phone: string; status: string; availability: string };

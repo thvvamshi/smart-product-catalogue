@@ -4,6 +4,10 @@ import pg from 'pg';
 import { env } from '../src/config/env.js';
 
 const client = new pg.Client({ connectionString: env.DATABASE_URL, ssl: env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined });
+const databaseTarget = new URL(env.DATABASE_URL);
+if (!['localhost', '127.0.0.1', '::1'].includes(databaseTarget.hostname)) {
+  throw new Error(`Refusing schema application against non-local database host: ${databaseTarget.hostname}`);
+}
 try {
   await client.connect();
   const sql = await readFile(fileURLToPath(new URL('./schema.sql', import.meta.url)), 'utf8');
