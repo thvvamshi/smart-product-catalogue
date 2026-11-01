@@ -1,0 +1,1 @@
+import*as model from'../models/address.model.js';import type{AddressInput}from'../types/commerce.types.js';export const list=(sessionId:string)=>model.listAddresses(sessionId);export const create=(sessionId:string,input:AddressInput)=>model.createAddress(sessionId,input);

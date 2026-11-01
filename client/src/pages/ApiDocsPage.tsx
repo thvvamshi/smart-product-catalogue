@@ -326,6 +326,22 @@ export function ApiDocsPage() {
         </div>
       </section>
 
+      <section aria-labelledby="hyperlocal-endpoints">
+        <h2 id="hyperlocal-endpoints">Hyperlocal store endpoints</h2>
+        <p>All stores and inventory in Phase 1 are simulated demo data. Coordinates are accepted only as validated query parameters and are not stored by these read-only endpoints.</p>
+        <div className="endpoint-list">
+          <Endpoint method="GET" path="/stores/nearby" />
+          <p>Requires <code>latitude</code> and <code>longitude</code>; optionally accepts <code>radiusKm</code> and <code>limit</code>. Returns active demo stores ordered by distance.</p>
+          <Endpoint method="GET" path="/stores/serviceability" />
+          <p>Returns whether at least one active store can deliver to the supplied coordinates and identifies the nearest serviceable store.</p>
+          <Endpoint method="GET" path="/stores/:storeId" />
+          <p>Returns public store details or HTTP 404.</p>
+          <Endpoint method="GET" path="/stores/:storeId/inventory" />
+          <p>Supports <code>q</code>, <code>available</code>, <code>limit</code>, and an opaque <code>cursor</code>.</p>
+        </div>
+        <CodeBlock language="bash" label="nearby demo stores request" code={`curl "${API_BASE_URL}/stores/nearby?latitude=17.4401&longitude=78.3489&radiusKm=10&limit=10"`} />
+      </section>
+
       <section aria-labelledby="catalogue-data">
         <h2 id="catalogue-data">Catalogue data</h2>
         <p>
@@ -338,6 +354,30 @@ export function ApiDocsPage() {
           label="database seed commands"
           code={`npm run db:schema -w server\nnpm run db:seed -w server\nnpm run db:verify-count -w server`}
         />
+      </section>
+
+      <section aria-labelledby="fashion-discovery">
+        <h2 id="fashion-discovery">Fashion discovery and variants</h2>
+        <p>Discovery is location-aware and read-only. It considers only active stores that can serve the supplied coordinates, selects stock for one exact variant, and chooses the closest eligible store (then price and store ID as deterministic tie-breakers).</p>
+        <div className="endpoint-list">
+          <Endpoint method="GET" path="/discovery/products" />
+          <p>Requires <code>latitude</code> and <code>longitude</code>. Supports search, category, brand, gender, size, sizeSystem, color, material, price, availability, distance, sort, limit, and an opaque cursor.</p>
+          <Endpoint method="GET" path="/discovery/products/:productId" />
+          <p>Returns all active variants and location-specific store availability for the product.</p>
+          <Endpoint method="GET" path="/discovery/suggestions" />
+          <Endpoint method="GET" path="/discovery/categories" />
+          <Endpoint method="GET" path="/discovery/filters" />
+          <Endpoint method="GET" path="/discovery/variants/:variantId/stores" />
+        </div>
+        <p>Sort values are <code>relevance</code>, <code>price_asc</code>, <code>price_desc</code>, and <code>nearest</code>. The default limit is 20 and maximum is 50. Pagination returns <code>nextCursor</code> and <code>hasMore</code>; no page number or fabricated total is returned.</p>
+        <CodeBlock language="bash" label="fashion discovery request" code={`curl -G "${API_BASE_URL}/discovery/products" \\\n+  --data-urlencode "latitude=17.4401" \\\n+  --data-urlencode "longitude=78.3489" \\\n+  --data-urlencode "category=women-dresses" \\\n+  --data-urlencode "color=Black" \\\n+  --data-urlencode "sort=nearest"`} />
+      </section>
+
+      <section aria-labelledby="commerce-api">
+        <h2 id="commerce-api">Cart and checkout reservation</h2>
+        <p>Commerce endpoints require a private <code>X-Cart-Session</code> header. Adding cart items does not reserve stock. Reservation creation additionally requires an <code>Idempotency-Key</code> and atomically reserves every store line or none.</p>
+        <div className="endpoint-list"><Endpoint method="GET" path="/cart"/><Endpoint method="POST" path="/cart/items"/><Endpoint method="PATCH" path="/cart/items/:itemId"/><Endpoint method="DELETE" path="/cart/items/:itemId"/><Endpoint method="DELETE" path="/cart"/><Endpoint method="GET" path="/addresses"/><Endpoint method="POST" path="/addresses"/><Endpoint method="POST" path="/checkout/validate"/><Endpoint method="POST" path="/checkout/reservations"/><Endpoint method="GET" path="/checkout/reservations/:id"/><Endpoint method="POST" path="/checkout/reservations/:id/release"/></div>
+        <CodeBlock language="bash" label="atomic reservation request" code={`curl -X POST "${API_BASE_URL}/checkout/reservations" \\\n+  -H "Content-Type: application/json" \\\n+  -H "X-Cart-Session: guest_example_session_123" \\\n+  -H "Idempotency-Key: checkout_attempt_123" \\\n+  -d '{"addressId":"1"}'`} />
       </section>
 
       <section aria-labelledby="statuses">
@@ -355,6 +395,7 @@ export function ApiDocsPage() {
             <dt>404</dt>
             <dd>Product or route not found.</dd>
           </div>
+          <div><dt>409</dt><dd>Cart, inventory, idempotency, or reservation-state conflict.</dd></div>
           <div>
             <dt>500</dt>
             <dd>

@@ -47,7 +47,7 @@ describe("CataloguePage infinite scrolling", () => {
     vi.mocked(fetch).mockResolvedValueOnce(ok(response(batch(1), "CURSOR_20"))).mockResolvedValueOnce(ok(response(batch(21))));
     renderPage();
     await screen.findByText("Product 20");
-    expect(getLastIntersectionObserver().rootMargin).toBe("320px 0px");
+    await waitFor(() => expect(getLastIntersectionObserver().rootMargin).toBe("320px 0px"));
     await intersect();
     expect(await screen.findByText("Product 40")).toBeInTheDocument();
     expect(screen.getByText("Product 1")).toBeInTheDocument();
@@ -144,8 +144,9 @@ describe("CataloguePage infinite scrolling", () => {
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "camera" } });
     expect(fetch).toHaveBeenCalledTimes(1);
     await act(async () => { vi.advanceTimersByTime(300); await Promise.resolve(); await Promise.resolve(); });
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(String(vi.mocked(fetch).mock.calls[1]?.[0])).toContain("q=camera");
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("q=camera"))).toBe(true);
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/discovery/suggestions?search=camera"))).toBe(true);
   });
 
   it("recovers from an initial request failure", async () => {

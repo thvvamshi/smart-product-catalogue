@@ -1,0 +1,1 @@
+import{expireReservations}from'../src/models/checkout.model.js';import{closePool}from'../src/db/pool.js';try{console.log(`Expired ${await expireReservations()} reservations.`)}finally{await closePool()}
