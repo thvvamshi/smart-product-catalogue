@@ -10,6 +10,7 @@ import { CheckoutPage } from "./pages/CheckoutPage";
 import { OrdersPage } from "./pages/OrdersPage";
 import { OrderDetailPage } from "./pages/OrderDetailPage";
 import { StoreDashboardPage } from "./pages/StoreDashboardPage";
+import { UnifiedDemoStorePage } from "./pages/UnifiedDemoStorePage";
 import { DeliveryDashboardPage } from "./pages/DeliveryDashboardPage";
 import { DeliveryAgentsPage } from "./pages/DeliveryAgentsPage";
 import { AgentDeliveriesPage } from "./pages/AgentDeliveriesPage";
@@ -28,7 +29,8 @@ export default function App() {
           <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/orders/:orderId" element={<OrderDetailPage />} />
-          <Route path="/store-dashboard" element={<StoreDashboardPage />} />
+          <Route path="/store-dashboard" element={<UnifiedDemoStorePage />} />
+          <Route path="/store-operator" element={<StoreDashboardPage />} />
           <Route path="/admin/delivery" element={<DeliveryDashboardPage />} />
           <Route path="/admin/delivery-agents" element={<DeliveryAgentsPage />} />
           <Route path="/agent/deliveries" element={<AgentDeliveriesPage />} />

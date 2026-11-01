@@ -5,6 +5,8 @@ import { requireGuestSession } from "../middleware/guest-session.js";
 import { validateBody, validateParam, validateQuery } from "../middleware/validate-request.js";
 import { agentCreateSchema, agentIdSchema, agentPatchSchema, assignSchema, availabilitySchema, deliveryListQuerySchema, failSchema, locationSchema, taskIdSchema } from "../schemas/delivery.schema.js";
 import { demoSettingsSchema } from "../schemas/demo-settings.schema.js";
+import { demoStoreTransitionSchema } from "../schemas/delivery.schema.js";
+import * as orderController from "../controllers/order.controller.js";
 import * as demoSettings from "../controllers/demo-settings.controller.js";
 
 export const deliveryAgentRouter = Router();
@@ -25,6 +27,10 @@ dispatchRouter.get("/tasks/:id", validateParam("id", taskIdSchema), controller.t
 dispatchRouter.post("/tasks/:id/assign", validateParam("id", taskIdSchema), validateBody(assignSchema), controller.assign);
 dispatchRouter.post("/tasks/:id/reassign", validateParam("id", taskIdSchema), validateBody(assignSchema), controller.reassign);
 dispatchRouter.get("/agents", controller.listAgents);
+dispatchRouter.get("/store-orders", validateQuery(deliveryListQuerySchema), orderController.demoStoreList);
+dispatchRouter.post("/store-orders/:id/transition", validateParam("id", taskIdSchema), validateBody(demoStoreTransitionSchema), orderController.demoStoreTransition);
+dispatchRouter.post("/store-orders/:id/confirm-pickup", validateParam("id", taskIdSchema), controller.demoPickup);
+dispatchRouter.post("/tasks/:id/demo-complete", validateParam("id", taskIdSchema), controller.demoComplete);
 
 export const agentRouter = Router();
 agentRouter.use(requireAgent);

@@ -58,7 +58,7 @@ export function CheckoutPage() {
               </header>
               {group.eta && group.store.serviceable && Date.parse(group.eta.validUntil) > Date.now() ? (
                 <p className="checkout-eta" aria-label={`Estimated delivery for ${group.store.name}`}>
-                  Estimated delivery: {group.eta.minEtaMinutes}–{group.eta.maxEtaMinutes} min · provisional distance estimate
+                  Estimated delivery: {group.eta.minEtaMinutes}–{group.eta.maxEtaMinutes} min · {group.eta.etaSource === "provisional_haversine" ? "approximate distance estimate" : group.eta.etaSource === "traffic_aware_routing" ? "traffic-aware road estimate" : "road-based estimate"}
                 </p>
               ) : null}
               {group.items.map((item) => (

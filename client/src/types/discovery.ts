@@ -5,4 +5,4 @@ export type DiscoveryDetail={data:{product:DiscoveryItem['product'];variants:Dis
 export type DiscoveryCategory={id:string;slug:string;name:string;children:Array<{id:string;slug:string;name:string}>};
 export type DiscoveryFilters={brands:string[];genders:string[];sizes:string[];sizeSystems:string[];colors:string[];materials:string[]};
 export type DiscoverySuggestion={id:string;name:string;brand:string};
-export type VariantStore={store_id:string;store_name:string;distance_km:number;price:number;stock_quantity:number};
+export type VariantStore={store_id:string;store_name:string;distance_km:number;price:number;stock_quantity:number;eta?:{minEtaMinutes:number;maxEtaMinutes:number;etaSource:string}|null};

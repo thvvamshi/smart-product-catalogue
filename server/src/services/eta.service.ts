@@ -1,6 +1,7 @@
 import { env } from "../config/env.js";
 import type { EtaConfig, EtaEstimate, EtaStage } from "../types/eta.types.js";
 import { getDemoDeliverySettings } from "./demo-settings.service.js";
+import { routeEstimate } from "./routes.provider.js";
 
 export type EtaInput = { storeLatitude: number; storeLongitude: number; customerLatitude: number; customerLongitude: number; preparationMinutes: number; stage?: EtaStage; calculatedAt?: Date; config?: EtaConfig };
 
@@ -25,6 +26,17 @@ export function calculateEta(input: EtaInput): EtaEstimate | null {
   const estimated = new Date(now.getTime() + etaMinutes * 60_000);
   const validUntil = new Date(now.getTime() + config.validityMinutes * 60_000);
   return { etaMinutes, minEtaMinutes, maxEtaMinutes, estimatedDeliveryAt: estimated.toISOString(), etaSource: "provisional_haversine", calculatedAt: now.toISOString(), validUntil: validUntil.toISOString(), confidence: "low", metadata: { distanceKm: Number(distance.toFixed(3)), averageSpeedKmh: config.averageSpeedKmh, preparationMinutes: preparation, dispatchBufferMinutes: dispatch, uncertaintyBufferMinutes: uncertainty, stage } };
+}
+
+export async function calculateHybridEta(input: EtaInput): Promise<EtaEstimate | null> {
+  const fallback = calculateEta(input);
+  if (!fallback) return null;
+  const route = await routeEstimate({ originLatitude: input.storeLatitude, originLongitude: input.storeLongitude, destinationLatitude: input.customerLatitude, destinationLongitude: input.customerLongitude });
+  if (!route) return fallback;
+  const config = input.config ?? { averageSpeedKmh: getDemoDeliverySettings().simulationEnabled ? getDemoDeliverySettings().speedKmh : env.ETA_AVERAGE_SPEED_KMH, dispatchBufferMinutes: env.ETA_DISPATCH_BUFFER_MINUTES, uncertaintyBufferMinutes: env.ETA_UNCERTAINTY_BUFFER_MINUTES, validityMinutes: env.ETA_VALIDITY_MINUTES };
+  const stage = input.stage ?? "pending_assignment"; const inTransit = ["picked_up", "out_for_delivery"].includes(stage); const preparation = inTransit ? 0 : input.preparationMinutes; const dispatch = inTransit ? 0 : config.dispatchBufferMinutes;
+  const base = Math.max(1, preparation + dispatch + route.durationSeconds / 60); const now = input.calculatedAt ?? new Date(); const etaMinutes = Math.max(1, Math.round(base)); const minEtaMinutes = Math.max(1, Math.floor(Math.max(1, base - config.uncertaintyBufferMinutes))); const maxEtaMinutes = Math.max(etaMinutes, Math.ceil(base + config.uncertaintyBufferMinutes));
+  return { etaMinutes, minEtaMinutes, maxEtaMinutes, estimatedDeliveryAt: new Date(now.getTime() + etaMinutes * 60_000).toISOString(), etaSource: route.trafficAware ? "traffic_aware_routing" : "road_routing", calculatedAt: now.toISOString(), validUntil: new Date(now.getTime() + config.validityMinutes * 60_000).toISOString(), confidence: route.trafficAware ? "high" : "medium", metadata: { distanceKm: Number((route.distanceMeters / 1000).toFixed(3)), averageSpeedKmh: config.averageSpeedKmh, preparationMinutes: preparation, dispatchBufferMinutes: dispatch, uncertaintyBufferMinutes: config.uncertaintyBufferMinutes, stage, roadDistanceMeters: route.distanceMeters, travelDurationSeconds: route.durationSeconds, routingProvider: route.provider, trafficAware: route.trafficAware } };
 }
 
 export function overallEta(estimates: Array<{ storeId: string; estimate: EtaEstimate | null; active?: boolean }>) {

@@ -83,6 +83,35 @@ export async function assign(taskId: string, agentId: string, actor: string, rea
   } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
 }
 
+/** Explicit demo-wide shortcut: advances only the existing valid agent state machine. */
+export async function confirmDemoPickup(storeOrderId: string, dispatcherIdentity: string) {
+  let task = (await pool.query<{ id: string }>("SELECT id::text FROM delivery_tasks WHERE store_order_id=$1", [storeOrderId])).rows[0];
+  if (!task) throw new CommerceError("DELIVERY_TASK_NOT_FOUND", "A ready-for-pickup delivery task was not found", 409);
+  let current = await getTask(task.id);
+  if (!current) throw new CommerceError("DELIVERY_NOT_FOUND", "Delivery task not found", 404);
+  if (current.status === "pending_assignment") {
+    const agent = (await pool.query<{ id: string }>("SELECT id::text FROM delivery_agents WHERE status='active' AND availability='available' ORDER BY id LIMIT 1")).rows[0];
+    if (!agent) throw new CommerceError("AGENT_NOT_AVAILABLE", "No demo delivery agent is currently available", 409);
+    await assign(task.id, agent.id, dispatcherIdentity);
+    current = await getTask(task.id);
+  }
+  if (!current?.agentId) throw new CommerceError("DELIVERY_ASSIGNMENT_NOT_FOUND", "An active delivery assignment is required", 409);
+  if (current.status === "assigned") current = await transitionAgent(task.id, current.agentId, "heading");
+  if (current.status === "heading_to_store") current = await transitionAgent(task.id, current.agentId, "arrived");
+  if (current.status === "arrived_at_store") current = await transitionAgent(task.id, current.agentId, "pickup");
+  if (current.status !== "picked_up") throw new CommerceError("INVALID_DELIVERY_TRANSITION", "Delivery cannot be confirmed as picked up from its current state", 409);
+  return current;
+}
+
+export async function completeDemoDelivery(taskId: string, failed = false) {
+  let task = await getTask(taskId);
+  if (!task?.agentId) throw new CommerceError("DELIVERY_ASSIGNMENT_NOT_FOUND", "An active delivery assignment is required", 409);
+  if (failed) return fail(taskId, task.agentId, "Delivery issue reported from Demo Store");
+  if (task.status === "picked_up") task = await transitionAgent(taskId, task.agentId, "out");
+  if (task.status !== "out_for_delivery") throw new CommerceError("INVALID_DELIVERY_TRANSITION", "Delivery must be picked up before it can be completed", 409);
+  return complete(taskId, task.agentId);
+}
+
 const transitions: Record<string, { from: DeliveryStatus[]; to: DeliveryStatus }> = {
   heading: { from: ["assigned"], to: "heading_to_store" }, arrived: { from: ["heading_to_store"], to: "arrived_at_store" }, pickup: { from: ["arrived_at_store"], to: "picked_up" }, out: { from: ["picked_up"], to: "out_for_delivery" },
 };
@@ -99,7 +128,7 @@ export async function fail(taskId: string, agentId: string, reason: string) {
 }
 
 export async function agentTasks(agentId: string) { return (await pool.query("SELECT dt.id::text,dt.task_number AS \"taskNumber\",dt.status,dt.store_order_id::text AS \"storeOrderId\",dt.customer_order_id::text AS \"customerOrderId\",dt.created_at AS \"createdAt\" FROM delivery_tasks dt JOIN delivery_assignments a ON a.delivery_task_id=dt.id WHERE a.agent_id=$1 AND a.status='active' ORDER BY dt.created_at DESC",[agentId])).rows; }
-export async function customerTasks(sessionId: string, orderId: string) { return (await pool.query(`SELECT dt.id::text,dt.task_number AS "taskNumber",dt.status,dt.failure_reason AS "failureReason",dt.assigned_at AS "assignedAt",dt.picked_up_at AS "pickedUpAt",dt.delivered_at AS "deliveredAt",s.name AS "storeName",l.latitude::float8,l.longitude::float8,l.accuracy_meters::float8 AS "accuracyMeters",l.captured_at AS "capturedAt",l.received_at AS "receivedAt",(l.received_at >= NOW()-($3::text||' seconds')::interval) AS "locationFresh" FROM delivery_tasks dt JOIN customer_orders o ON o.id=dt.customer_order_id JOIN store_orders so ON so.id=dt.store_order_id JOIN stores s ON s.id=so.store_id LEFT JOIN delivery_task_locations l ON l.delivery_task_id=dt.id WHERE dt.customer_order_id=$1 AND o.session_id=$2 ORDER BY dt.id`,[orderId,sessionId,env.DELIVERY_LOCATION_MAX_AGE_SECONDS])).rows; }
+export async function customerTasks(sessionId: string, orderId: string) { return (await pool.query(`SELECT dt.id::text,dt.task_number AS "taskNumber",dt.store_order_id::text AS "storeOrderId",dt.status,dt.failure_reason AS "failureReason",dt.assigned_at AS "assignedAt",dt.picked_up_at AS "pickedUpAt",dt.delivered_at AS "deliveredAt",s.name AS "storeName",da.name AS "agentName",l.latitude::float8,l.longitude::float8,l.accuracy_meters::float8 AS "accuracyMeters",l.captured_at AS "capturedAt",l.received_at AS "receivedAt",(l.received_at >= NOW()-($3::text||' seconds')::interval) AS "locationFresh" FROM delivery_tasks dt JOIN customer_orders o ON o.id=dt.customer_order_id JOIN store_orders so ON so.id=dt.store_order_id JOIN stores s ON s.id=so.store_id LEFT JOIN delivery_assignments a ON a.delivery_task_id=dt.id AND a.status='active' LEFT JOIN delivery_agents da ON da.id=a.agent_id LEFT JOIN delivery_task_locations l ON l.delivery_task_id=dt.id WHERE dt.customer_order_id=$1 AND o.session_id=$2 ORDER BY dt.id`,[orderId,sessionId,env.DELIVERY_LOCATION_MAX_AGE_SECONDS])).rows; }
 export async function customerTracking(sessionId: string, taskId: string) { return (await pool.query(`SELECT dt.id::text,dt.task_number AS "taskNumber",dt.status,dt.failure_reason AS "failureReason",dt.assigned_at AS "assignedAt",dt.picked_up_at AS "pickedUpAt",dt.delivered_at AS "deliveredAt",l.latitude::float8,l.longitude::float8,l.accuracy_meters::float8 AS "accuracyMeters",l.captured_at AS "capturedAt",l.received_at AS "receivedAt",(l.received_at >= NOW()-($3::text||' seconds')::interval) AS "locationFresh" FROM delivery_tasks dt JOIN customer_orders o ON o.id=dt.customer_order_id LEFT JOIN delivery_task_locations l ON l.delivery_task_id=dt.id WHERE dt.id=$1 AND o.session_id=$2`,[taskId,sessionId,env.DELIVERY_LOCATION_MAX_AGE_SECONDS])).rows[0] ?? null; }
 export async function updateLocation(taskId: string, agentId: string, input: { latitude: number; longitude: number; accuracyMeters: number; headingDegrees?: number | null; speedMps?: number | null; capturedAt: string }) {
   const client = await pool.connect();

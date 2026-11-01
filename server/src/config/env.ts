@@ -18,6 +18,12 @@ const schema = z.object({
   ETA_DISPATCH_BUFFER_MINUTES: z.coerce.number().min(0).max(120).default(5),
   ETA_UNCERTAINTY_BUFFER_MINUTES: z.coerce.number().min(0).max(120).default(5),
   ETA_VALIDITY_MINUTES: z.coerce.number().int().min(1).max(120).default(10),
+  ROUTES_PROVIDER: z.enum(['none', 'google']).default('none'),
+  // `.env` commonly contains GOOGLE_MAPS_API_KEY= as a documented optional
+  // setting. Treat that as absent so local development can use the free
+  // Haversine fallback when ROUTES_PROVIDER=none.
+  GOOGLE_MAPS_API_KEY: z.preprocess((value) => typeof value === 'string' && value.trim() === '' ? undefined : value, z.string().min(1).optional()),
+  ROUTES_TIMEOUT_MS: z.coerce.number().int().min(500).max(15000).default(3500),
   DELIVERY_LOCATION_MAX_CLOCK_SKEW_SECONDS: z.coerce.number().int().min(0).max(900).default(120),
   DELIVERY_LOCATION_MIN_INTERVAL_SECONDS: z.coerce.number().int().min(0).max(300).default(5),
   DELIVERY_LOCATION_MAX_AGE_SECONDS: z.coerce.number().int().min(5).max(3600).default(120),

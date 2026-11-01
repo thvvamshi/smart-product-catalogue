@@ -4,7 +4,7 @@ import { pool } from "../db/pool.js";
 import { haversineSql } from "../db/haversine.js";
 import type { ValidationIssue } from "../types/commerce.types.js";
 import { CommerceError } from "../utils/commerce-error.js";
-import { calculateEta, isEtaFresh, overallEta } from "../services/eta.service.js";
+import { calculateHybridEta, isEtaFresh, overallEta } from "../services/eta.service.js";
 import { insertSnapshots, reservationEstimates } from "./eta.model.js";
 import { createFromReservation } from "./order.model.js";
 import { publishDeliveryEvent } from "../realtime.js";
@@ -115,11 +115,11 @@ export function issuesFor(data: CheckoutRow[]): ValidationIssue[] {
   }
   return issues;
 }
-export function checkoutResponse(data: CheckoutRow[], issues: ValidationIssue[]) {
-  const groups = [...new Set(data.map((row) => row.store_id))].map(
-    (storeId) => {
+export async function checkoutResponse(data: CheckoutRow[], issues: ValidationIssue[]) {
+  const groups = await Promise.all([...new Set(data.map((row) => row.store_id))].map(
+    async (storeId) => {
       const selected = data.filter((row) => row.store_id === storeId);
-      const calculatedEstimate = calculateEta({ storeLatitude: Number(selected[0]!.store_latitude), storeLongitude: Number(selected[0]!.store_longitude), customerLatitude: Number(selected[0]!.customer_latitude), customerLongitude: Number(selected[0]!.customer_longitude), preparationMinutes: selected[0]!.preparation_time_minutes });
+      const calculatedEstimate = await calculateHybridEta({ storeLatitude: Number(selected[0]!.store_latitude), storeLongitude: Number(selected[0]!.store_longitude), customerLatitude: Number(selected[0]!.customer_latitude), customerLongitude: Number(selected[0]!.customer_longitude), preparationMinutes: selected[0]!.preparation_time_minutes });
       const estimate = calculatedEstimate && isEtaFresh(calculatedEstimate) ? calculatedEstimate : null;
       return {
         store: {
@@ -148,7 +148,7 @@ export function checkoutResponse(data: CheckoutRow[], issues: ValidationIssue[])
         subtotal: selected[0]!.store_subtotal,
       };
     },
-  );
+  ));
   const activeEstimates = groups.map((group) => ({
     storeId: group.store.id,
     estimate: group.eta,
@@ -175,7 +175,7 @@ export async function validateCheckout(sessionId: string, addressId: string) {
     if (!data.length)
       throw new CommerceError("CART_EMPTY", "Cart is empty", 409);
     await client.query("COMMIT");
-    return checkoutResponse(data, issuesFor(data));
+    return await checkoutResponse(data, issuesFor(data));
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -278,9 +278,9 @@ export async function reserve(
         [attemptId, JSON.stringify(issues)],
       );
       if (ownsTransaction) await client.query("COMMIT");
-      return { created: true, validation: checkoutResponse(data, issues) };
+      return { created: true, validation: await checkoutResponse(data, issues) };
     }
-    const checkoutEstimate = checkoutResponse(data, []);
+    const checkoutEstimate = await checkoutResponse(data, []);
     await insertSnapshots(client, "checkout", { checkoutAttemptId: attemptId }, checkoutEstimate.groups.map((group) => ({ storeId: group.store.id, eta: group.eta })), checkoutEstimate.eta);
     for (const row of data) {
       const updated = await client.query(
@@ -306,7 +306,7 @@ export async function reserve(
         [attemptId, expires],
       )
     ).rows[0]!;
-    const reservationEstimate = checkoutResponse(data, []);
+    const reservationEstimate = await checkoutResponse(data, []);
     await insertSnapshots(client, "reservation", { checkoutAttemptId: attemptId, reservationId: reservation.id }, reservationEstimate.groups.map((group) => ({ storeId: group.store.id, eta: group.eta })), reservationEstimate.eta);
     for (const row of data)
       await client.query(

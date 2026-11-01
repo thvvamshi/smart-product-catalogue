@@ -1,6 +1,6 @@
 import * as model from "../models/cart.model.js";
 import type { CartMutation } from "../types/commerce.types.js";
-import { calculateEta, overallEta } from "./eta.service.js";
+import { calculateHybridEta, overallEta } from "./eta.service.js";
 export async function getCart(sessionId: string) {
   await model.activeCartId(sessionId, true);
   const rows = await model.cartLines(sessionId);
@@ -49,8 +49,8 @@ export async function clear(sessionId: string) {
 }
 export async function estimateDelivery(sessionId: string, latitude: number, longitude: number) {
   const stores = await model.cartStoreEtaInputs(sessionId);
-  const groups = stores.map((store) => {
-    const calculated = calculateEta({
+  const groups = await Promise.all(stores.map(async (store) => {
+    const calculated = await calculateHybridEta({
       storeLatitude: Number(store.latitude),
       storeLongitude: Number(store.longitude),
       customerLatitude: latitude,
@@ -62,6 +62,6 @@ export async function estimateDelivery(sessionId: string, latitude: number, long
       storeName: store.store_name,
       eta: calculated && calculated.metadata.distanceKm <= Number(store.delivery_radius_km) ? calculated : null,
     };
-  });
+  }));
   return { data: { groups, eta: overallEta(groups.map((group) => ({ storeId: group.storeId, estimate: group.eta, active: Boolean(group.eta) }))) } };
 }

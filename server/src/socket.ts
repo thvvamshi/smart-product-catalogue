@@ -2,15 +2,18 @@ import type { Server as HttpServer } from "node:http";
 import { Server } from "socket.io";
 import { pool } from "./db/pool.js";
 import { deliveryEvents } from "./realtime.js";
+import { guestSessionFromCookie, validGuestSession } from "./middleware/guest-session.js";
 
 type Identity = { sessionId?: string; agentId?: string; dispatchRole?: string };
 export function attachSocket(httpServer: HttpServer) {
-  const io = new Server(httpServer, { cors: { origin: process.env.CLIENT_URL?.split(",").map((value) => value.trim()) ?? [], methods: ["GET", "POST"] } });
+  const io = new Server(httpServer, { cors: { origin: process.env.CLIENT_URL?.split(",").map((value) => value.trim()) ?? [], methods: ["GET", "POST"], credentials: true } });
   io.use(async (socket, next) => {
     const auth = socket.handshake.auth as { sessionId?: string; agentIdentity?: string; dispatchIdentity?: string };
     const identity: Identity = {};
     try {
-      if (auth.sessionId) identity.sessionId = auth.sessionId;
+      const cookieSession = guestSessionFromCookie(socket.handshake.headers.cookie);
+      if (validGuestSession(cookieSession)) identity.sessionId = cookieSession;
+      else if (validGuestSession(auth.sessionId)) identity.sessionId = auth.sessionId;
       if (auth.agentIdentity) {
         const agent = (await pool.query<{ id: string; status: string }>("SELECT id::text,status FROM delivery_agents WHERE identity_key=$1", [auth.agentIdentity])).rows[0];
         if (!agent || agent.status !== "active") return next(new Error("AGENT_FORBIDDEN"));

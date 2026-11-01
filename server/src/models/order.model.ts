@@ -138,6 +138,28 @@ export async function listStoreOrders(operatorKey: string, limit = 50) {
   } finally { client.release(); }
 }
 
+/** Demo-dispatch only: normal store APIs remain store-scoped. */
+export async function listDemoStoreOrders(limit = 100) {
+  const client = await pool.connect();
+  try {
+    const rows = (await client.query<{ id: string; customer_order_id: string }>("SELECT id::text,customer_order_id::text FROM store_orders ORDER BY created_at DESC,id DESC LIMIT $1", [limit])).rows;
+    const details = await Promise.all(rows.map(async (row) => {
+      const order = await orderPayload(client, row.customer_order_id);
+      const store = order?.storeOrders.find((item: { id: string }) => item.id === row.id);
+      if (!store) return null;
+      const delivery = (await client.query(`SELECT dt.id::text,dt.task_number AS "taskNumber",dt.status,dt.picked_up_at AS "pickedUpAt",da.name AS "agentName",l.latitude::float8,l.longitude::float8,l.accuracy_meters::float8 AS "accuracyMeters",l.received_at AS "receivedAt",(l.received_at >= NOW()-($2::text||' seconds')::interval) AS "locationFresh" FROM delivery_tasks dt LEFT JOIN delivery_assignments a ON a.delivery_task_id=dt.id AND a.status='active' LEFT JOIN delivery_agents da ON da.id=a.agent_id LEFT JOIN delivery_task_locations l ON l.delivery_task_id=dt.id WHERE dt.store_order_id=$1`, [row.id, env.DELIVERY_LOCATION_MAX_AGE_SECONDS])).rows[0] ?? null;
+      return { ...store, orderNumber: order!.orderNumber, customerOrderId: order!.id, customerAddressSnapshot: order!.addressSnapshot, delivery };
+    }));
+    return { data: details.filter(Boolean) };
+  } finally { client.release(); }
+}
+
+export async function transitionDemoStoreOrder(id: string, action: "accept" | "prepare" | "ready") {
+  const operator = (await pool.query<{ operator_key: string }>("SELECT op.operator_key FROM store_orders so JOIN store_operators op ON op.store_id=so.store_id AND op.is_active WHERE so.id=$1 ORDER BY op.id LIMIT 1", [id])).rows[0];
+  if (!operator) throw new CommerceError("DEMO_STORE_OPERATOR_NOT_FOUND", "No active demo operator is configured for this store", 409);
+  return transitionStoreOrder(operator.operator_key, id, action);
+}
+
 export async function getStoreOrder(operatorKey: string, id: string) {
   const client = await pool.connect();
   try {

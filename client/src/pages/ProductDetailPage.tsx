@@ -110,7 +110,7 @@ export function ProductDetailPage() {
     return () => controller.abort();
   }, [location, selected?.id]);
   const selectedStore = stores.find((store) => store.store_id === selectedStoreId) ?? stores[0];
-  const etaRange = selectedStore ? (() => { const travel = Math.max(1, Math.ceil((selectedStore.distance_km / 20) * 60)); return { min: travel + 10, max: travel + 20 }; })() : null;
+  const etaRange = selectedStore?.eta ? { min: selectedStore.eta.minEtaMinutes, max: selectedStore.eta.maxEtaMinutes } : null;
   if (loading && !data)
     return (
       <main className="product-detail">
@@ -198,7 +198,7 @@ export function ProductDetailPage() {
             <p>
               {selectedStore.stock_quantity} available at {selectedStore.store_name} ({selectedStore.distance_km} km)
             </p>
-            {etaRange ? <small>Estimated delivery: {etaRange.min}–{etaRange.max} min · provisional distance estimate</small> : null}
+            {etaRange ? <small>Estimated delivery: {etaRange.min}–{etaRange.max} min · {selectedStore?.eta?.etaSource === "provisional_haversine" ? "approximate distance estimate" : selectedStore?.eta?.etaSource === "traffic_aware_routing" ? "traffic-aware road estimate" : "road-based estimate"}</small> : null}
           </div>
         ) : !location ? (
           <p className="discovery-message">

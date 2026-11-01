@@ -26,8 +26,6 @@ export function Navbar() {
         <NavLink to="/cart">Cart{cartCount ? ` (${cartCount})` : ""}</NavLink>
         <NavLink to="/orders">Orders</NavLink>
         <NavLink to="/store-dashboard">Demo store</NavLink>
-        <NavLink to="/admin/delivery">Demo dispatch</NavLink>
-        <NavLink to="/agent/deliveries">Demo agent</NavLink>
         <NavLink to="/docs">API Docs</NavLink>
       </nav></div>
     </header>
