@@ -17,6 +17,11 @@ describe('ApiDocsPage', () => {
     expect(screen.getByText('/stores/serviceability')).toBeInTheDocument();
     expect(screen.getByText('/stores/:storeId')).toBeInTheDocument();
     expect(screen.getByText('/stores/:storeId/inventory')).toBeInTheDocument();
+    expect(screen.getByText('/checkout/place-order')).toBeInTheDocument();
+    expect(screen.getByText('/orders/:id/cancel')).toBeInTheDocument();
+    expect(screen.getByText('/dispatch/store-orders/:id/confirm-pickup')).toBeInTheDocument();
+    expect(screen.getByText('/agent/deliveries/:id/location')).toBeInTheDocument();
+    expect(screen.getByLabelText('one-step place order request')).toHaveTextContent('Idempotency-Key');
     expect(screen.getAllByRole('row')).toHaveLength(11);
     expect(screen.getByLabelText('successful product search response')).toHaveTextContent('"id": "42"');
     expect(screen.getByLabelText('successful product search response')).toHaveTextContent('"nextCursor"');

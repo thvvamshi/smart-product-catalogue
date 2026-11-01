@@ -9,7 +9,7 @@ const queryParameters = [
     "q",
     "string",
     "Empty",
-    "Case-insensitive partial search across name, description, brand, category, and SKU.",
+    "Normalized cross-field search across product and variant data, with controlled fuzzy matching.",
   ],
   ["category", "string", "—", "Exact category match."],
   ["brand", "string", "—", "Exact brand match."],
@@ -175,8 +175,9 @@ export function ApiDocsPage() {
         <p className="kicker">REST API</p>
         <h1>API Documentation</h1>
         <p>
-          The Smart Catalogue exposes a read-only REST API for searching
-          products and retrieving product details.
+          The Smart Catalogue exposes catalogue, local-commerce, order and
+          demo-delivery REST endpoints. Commerce and operations APIs are for
+          the local assignment demo, not production authentication.
         </p>
       </header>
 
@@ -197,9 +198,10 @@ export function ApiDocsPage() {
         <p>
           Search and filter the catalogue with server-side sorting and
           cursor-based infinite loading. Every supplied filter is combined with{" "}
-          <strong>AND</strong>. Search is case-insensitive and partial; category
-          and brand are exact matches. Search wildcard characters are treated
-          literally.
+          <strong>AND</strong>. Search normalizes case, whitespace and
+          punctuation; it can match product and variant attributes together
+          and applies controlled fuzzy ranking. Category and brand filters are
+          exact matches. Search wildcard characters are treated literally.
         </p>
       </section>
 
@@ -358,10 +360,10 @@ export function ApiDocsPage() {
 
       <section aria-labelledby="fashion-discovery">
         <h2 id="fashion-discovery">Fashion discovery and variants</h2>
-        <p>Discovery is location-aware and read-only. It considers only active stores that can serve the supplied coordinates, selects stock for one exact variant, and chooses the closest eligible store (then price and store ID as deterministic tie-breakers).</p>
+        <p>Discovery supports global browsing without coordinates and location-aware availability when valid coordinates are supplied. Location-aware results consider only active stores that can serve the supplied coordinates, select stock for one exact variant, and choose the closest eligible store (then price and store ID as deterministic tie-breakers).</p>
         <div className="endpoint-list">
           <Endpoint method="GET" path="/discovery/products" />
-          <p>Requires <code>latitude</code> and <code>longitude</code>. Supports search, category, brand, gender, size, sizeSystem, color, material, price, availability, distance, sort, limit, and an opaque cursor.</p>
+          <p>Coordinates are optional for global browsing. When supplied, they enable nearby inventory, distance and serviceability filtering. Supports search, category, brand, gender, size, sizeSystem, color, material, price, availability, distance, sort, limit, and an opaque cursor.</p>
           <Endpoint method="GET" path="/discovery/products/:productId" />
           <p>Returns all active variants and location-specific store availability for the product.</p>
           <Endpoint method="GET" path="/discovery/suggestions" />
@@ -370,14 +372,77 @@ export function ApiDocsPage() {
           <Endpoint method="GET" path="/discovery/variants/:variantId/stores" />
         </div>
         <p>Sort values are <code>relevance</code>, <code>price_asc</code>, <code>price_desc</code>, and <code>nearest</code>. The default limit is 20 and maximum is 50. Pagination returns <code>nextCursor</code> and <code>hasMore</code>; no page number or fabricated total is returned.</p>
-        <CodeBlock language="bash" label="fashion discovery request" code={`curl -G "${API_BASE_URL}/discovery/products" \\\n+  --data-urlencode "latitude=17.4401" \\\n+  --data-urlencode "longitude=78.3489" \\\n+  --data-urlencode "category=women-dresses" \\\n+  --data-urlencode "color=Black" \\\n+  --data-urlencode "sort=nearest"`} />
+        <CodeBlock
+          language="bash"
+          label="fashion discovery request"
+          code={`curl -G "${API_BASE_URL}/discovery/products?latitude=17.4401&longitude=78.3489&category=women-dresses&color=Black&sort=nearest"`}
+        />
       </section>
 
       <section aria-labelledby="commerce-api">
-        <h2 id="commerce-api">Cart and checkout reservation</h2>
-        <p>Commerce endpoints require a private <code>X-Cart-Session</code> header. Adding cart items does not reserve stock. Reservation creation additionally requires an <code>Idempotency-Key</code> and atomically reserves every store line or none.</p>
-        <div className="endpoint-list"><Endpoint method="GET" path="/cart"/><Endpoint method="POST" path="/cart/items"/><Endpoint method="PATCH" path="/cart/items/:itemId"/><Endpoint method="DELETE" path="/cart/items/:itemId"/><Endpoint method="DELETE" path="/cart"/><Endpoint method="GET" path="/addresses"/><Endpoint method="POST" path="/addresses"/><Endpoint method="POST" path="/checkout/validate"/><Endpoint method="POST" path="/checkout/reservations"/><Endpoint method="GET" path="/checkout/reservations/:id"/><Endpoint method="POST" path="/checkout/reservations/:id/release"/></div>
-        <CodeBlock language="bash" label="atomic reservation request" code={`curl -X POST "${API_BASE_URL}/checkout/reservations" \\\n+  -H "Content-Type: application/json" \\\n+  -H "X-Cart-Session: guest_example_session_123" \\\n+  -H "Idempotency-Key: checkout_attempt_123" \\\n+  -d '{"addressId":"1"}'`} />
+        <h2 id="commerce-api">Cart, checkout and orders</h2>
+        <p>
+          Commerce uses a browser guest session. The backend establishes an
+          HttpOnly cookie for same-profile, cross-tab continuity;{" "}
+          <code>X-Cart-Session</code> remains a compatibility header. Adding
+          to cart and validating checkout never allocate inventory. The
+          customer-facing placement action is{" "}
+          <code>POST /checkout/place-order</code>, which requires an{" "}
+          <code>Idempotency-Key</code> and atomically validates stock, creates
+          the order and store fulfilments, persists ETA snapshots, and removes
+          only purchased cart lines.
+        </p>
+        <div className="endpoint-list">
+          <Endpoint method="GET" path="/cart" />
+          <Endpoint method="POST" path="/cart/items" />
+          <Endpoint method="PATCH" path="/cart/items/:itemId" />
+          <Endpoint method="DELETE" path="/cart/items/:itemId" />
+          <Endpoint method="DELETE" path="/cart" />
+          <Endpoint method="GET" path="/addresses" />
+          <Endpoint method="POST" path="/addresses" />
+          <Endpoint method="POST" path="/checkout/validate" />
+          <Endpoint method="POST" path="/checkout/place-order" />
+          <Endpoint method="GET" path="/orders" />
+          <Endpoint method="GET" path="/orders/:id" />
+          <Endpoint method="GET" path="/orders/:id/history" />
+          <Endpoint method="POST" path="/orders/:id/cancel" />
+        </div>
+        <p>
+          Reservation endpoints remain available for the internal/demo
+          allocation flow, but are not part of the customer checkout journey.
+          Do not expose a separate “reserve inventory” action in a client.
+        </p>
+        <CodeBlock
+          language="bash"
+          label="one-step place order request"
+          code={`curl -X POST "${API_BASE_URL}/checkout/place-order" -H "Content-Type: application/json" -H "X-Cart-Session: guest_example_session_123" -H "Idempotency-Key: place_order_attempt_123" -d '{"addressId":"1"}'`}
+        />
+      </section>
+
+      <section aria-labelledby="demo-delivery-api">
+        <h2 id="demo-delivery-api">Demo Store and delivery tracking</h2>
+        <p>
+          The unified Demo Store is explicitly demo-wide and requires the
+          configured dispatcher identity. Normal <code>/store-orders</code>
+          endpoints remain scoped to their authorized store operator. These
+          operations APIs are not production authentication or dispatch
+          controls.
+        </p>
+        <div className="endpoint-list">
+          <Endpoint method="GET" path="/dispatch/store-orders" />
+          <Endpoint method="POST" path="/dispatch/store-orders/:id/transition" />
+          <Endpoint method="POST" path="/dispatch/store-orders/:id/confirm-pickup" />
+          <Endpoint method="POST" path="/dispatch/tasks/:id/demo-complete" />
+          <Endpoint method="GET" path="/orders/:id/deliveries" />
+          <Endpoint method="GET" path="/deliveries/:id/tracking" />
+          <Endpoint method="POST" path="/agent/deliveries/:id/location" />
+        </div>
+        <p>
+          Customer tracking receives authorized Socket.IO status events and
+          refreshes from REST after reconnecting. Location is shown only after
+          a fresh, valid browser GPS update from the assigned agent; the demo
+          never fabricates a route, courier position, or traffic-aware ETA.
+        </p>
       </section>
 
       <section aria-labelledby="statuses">

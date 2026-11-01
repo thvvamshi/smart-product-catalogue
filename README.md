@@ -6,7 +6,7 @@ A full-stack product discovery application built for the **Getto India Full Stac
 
 Designed with practical engineering priorities in mind: validated inputs, parameterized SQL, predictable pagination, database indexes, and automated tests.
 
-> **Project status:** A local-demo hyperlocal commerce application is implemented: global and location-aware discovery, variant/store fulfilment, multi-store cart and checkout reservation, orders, store operations, delivery assignment, ETA estimates, and Socket.IO-backed status updates. Stores, agents, delivery locations, and identities are simulated demo data; this is not a production delivery service.
+> **Project status:** A local-demo hyperlocal commerce application is implemented: global and location-aware discovery, variant/store fulfilment, multi-store cart, one-step atomic order placement, store operations, delivery assignment, ETA estimates, and Socket.IO-backed status updates. Stores, agents, delivery locations, and identities are simulated demo data; this is not a production delivery service.
 
 ## Project Overview
 
@@ -415,6 +415,12 @@ Local endpoints:
 | `DATABASE_URL` | PostgreSQL connection string | Local development database URL |
 | `CLIENT_URL` | Allowed frontend origin(s) for CORS | `http://localhost:5173` |
 | `TEST_DATABASE_URL` | Dedicated integration-test database | Local test database URL |
+| `ROUTES_PROVIDER` | Optional ETA road-routing provider | `none` for the local approximate fallback |
+| `GOOGLE_MAPS_API_KEY` | Backend-only Google Routes key when `ROUTES_PROVIDER=google` | Leave empty for local fallback |
+| `ROUTES_TIMEOUT_MS` | Road-routing request timeout | `3500` |
+| `DEMO_AUTO_ACCEPT_STORE_ORDERS` | Demo-only automatic store acceptance | `false` |
+| `DEMO_DELIVERY_SIMULATION_ENABLED` | Demo-only simulation setting | `false` |
+| `DEMO_DELIVERY_SPEED_KMH` | Demo ETA/simulation speed | `20` |
 
 Example configuration is provided in `server/.env.example`. Use the actual database credentials configured for your environment.
 
@@ -428,7 +434,7 @@ Example configuration is provided in `client/.env.example`.
 
 **Security note:** Vite exposes `VITE_*` variables to browser code. Never put database URLs, passwords, API keys, or other secrets in frontend environment variables.
 
-The real `.env` files are ignored by Git. Only safe example files should be committed.
+The real `.env` files are ignored by Git. Only safe example files should be committed. `GOOGLE_MAPS_API_KEY`, database URLs and all production credentials belong only in backend secret storage; never use a `VITE_*` variable for a secret.
 
 ## Database Design and Seed Data
 
@@ -952,7 +958,7 @@ Discovery endpoints:
 - `GET /api/discovery/categories` and `/api/discovery/filters` — taxonomy and facets.
 - `GET /api/discovery/variants/:variantId/stores` — eligible stores for one exact variant.
 
-Every location-aware request requires explicit latitude and longitude. No fallback location is invented or persisted. Fulfilment excludes inactive/non-serviceable stores and insufficient stock, then chooses distance, selling price, and store ID in that order. Stock is never merged across stores.
+Global catalogue requests do not require coordinates. Location-aware requests require explicit latitude and longitude; no fallback location is invented or persisted. Fulfilment excludes inactive/non-serviceable stores and insufficient stock, then chooses distance, selling price, and store ID in that order. Stock is never merged across stores.
 
 Local-only setup (review the effective target first):
 
@@ -963,26 +969,26 @@ npm run db:seed-fashion -w server
 
 The seed adds 20 fashion taxonomy nodes and 17 synthetic demo styles with deterministic colour/size variants. It is idempotent and refuses non-local targets unless a human explicitly supplies the remote override. Store inventory and imagery remain simulated demo data; subsequent sections document the implemented cart, checkout, reservation, order, and delivery workflows.
 
-## Multi-store Cart and Inventory Reservation (Phase 3)
+## Multi-store Cart and Atomic Checkout (Phase 3)
 
-Phase 3 introduces one session-owned cart that can contain exact variants from multiple stores. Browser guests receive a random, session-scoped identifier sent in the `X-Cart-Session` header. Addresses, carts, checkout attempts, and reservations are always queried through that identifier; this is deliberately not a replacement for authenticated customer accounts.
+Phase 3 introduces one guest-session-owned cart that can contain exact variants from multiple stores. The backend establishes an HttpOnly `catalogue_guest_session` cookie for a browser profile, so the same cart and order history remain available across tabs; `X-Cart-Session` is retained as a compatibility header. This is deliberately not a replacement for authenticated customer accounts.
 
-Adding or updating cart items never mutates inventory. `store_inventory.stock_quantity` is the currently sellable, unreserved quantity. `POST /api/checkout/validate` recalculates prices and serviceability without locking or reserving stock. `POST /api/checkout/reservations` requires an `Idempotency-Key`, locks only the required inventory rows in `(store_id, variant_id)` order, validates every line, and decrements all rows in one PostgreSQL transaction. Any failure rolls the whole transaction back.
+Adding or updating cart items never mutates inventory. `store_inventory.stock_quantity` is the currently sellable quantity. `POST /api/checkout/validate` recalculates prices and serviceability without locking or allocating stock. The customer-facing `POST /api/checkout/place-order` request requires an `Idempotency-Key`, locks required inventory rows in `(store_id, variant_id)` order, validates every line, and completes the allocation and order transaction atomically. Any failure rolls the whole transaction back.
 
 Migration `003_create_cart_checkout_reservations.sql` adds `customer_addresses`, `carts`, `cart_items`, `checkout_attempts`, `inventory_reservations`, and `inventory_reservation_items`. It does not alter or delete existing catalogue inventory. Monetary totals are calculated with PostgreSQL `NUMERIC`; API money values are decimal strings.
 
-Active reservations expire after `RESERVATION_TTL_MINUTES` (10 by default). A database-backed worker uses `FOR UPDATE SKIP LOCKED` and atomic state transitions to restore inventory exactly once. It can also be invoked manually with `npm run db:expire-reservations -w server`. Release and expiry are terminal; repeated release requests are rejected.
+The existing reservation tables remain as an internal allocation audit trail. The expiry worker uses `FOR UPDATE SKIP LOCKED` and atomic state transitions to restore only genuinely active temporary allocations exactly once. Consumed allocations created during a successful Place order transaction are never restored by expiry.
 
 Commerce endpoints:
 
 - `GET /api/cart`, `POST /api/cart/items`, `PATCH/DELETE /api/cart/items/:itemId`, `DELETE /api/cart`
 - `GET/POST /api/addresses`
 - `POST /api/checkout/validate`
-- `POST /api/checkout/reservations`
-- `GET /api/checkout/reservations/:id`
-- `POST /api/checkout/reservations/:id/release`
+- `POST /api/checkout/place-order`
+- `GET /api/orders?limit=20&cursor=...`
+- `GET /api/orders/:id`, `GET /api/orders/:id/history`, `POST /api/orders/:id/cancel`
 
-Browsing and validating checkout never allocates stock. Payment and delivery assignment are not performed there; the final Place order transaction allocates stock and creates the order as described below.
+Browsing and validating checkout never allocates stock. Payment and delivery assignment are not performed there; **Place order** is the only customer action that allocates stock and creates an order.
 
 ### One-step customer checkout
 
@@ -994,11 +1000,11 @@ The endpoint requires an `Idempotency-Key`. Retrying the same logical request re
 
 Migration `004_create_order_management.sql` adds parent `customer_orders`, independent `store_orders`, immutable `order_items`, append-only parent/store status histories, durable rejection-restoration adjustments, and a server-side `store_operators` authorization boundary. Migrations 001–003 are unchanged.
 
-Order creation is reservation-backed and idempotent:
+Order creation is atomic and idempotent:
 
-- `POST /api/orders` accepts `{ "reservationId": "..." }` and requires both `X-Cart-Session` and `Idempotency-Key`.
-- The reservation is locked and consumed in the same PostgreSQL transaction that creates the parent order, store orders, immutable snapshots, and initial histories.
-- Inventory is not decremented again during order creation.
+- `POST /api/checkout/place-order` accepts the selected address and requires the guest session and `Idempotency-Key`.
+- It locks exact inventory rows, creates the internal consumed allocation record, parent order, store orders, immutable snapshots, ETA snapshots, and initial histories in one PostgreSQL transaction.
+- Inventory is decremented exactly once; cart lines are removed only after a successful commit.
 - Reusing an idempotency key with the same request returns the existing order; a different request conflicts.
 
 Customer endpoints:
@@ -1019,11 +1025,13 @@ Store operator endpoints require `X-Store-Operator` mapped server-side to an act
 
 Store rejection restores the exact original `(store_id, variant_id)` inventory row in the same transaction as the rejection status transition. `order_inventory_adjustments` has a unique `(order_item_id, adjustment_type)` constraint, so retries and concurrent rejection requests cannot restore stock twice. Accepted store inventory remains committed. Parent status is derived centrally from store-order statuses and supports partial fulfilment (`partially_rejected`).
 
-The frontend includes `/orders`, `/orders/:orderId`, checkout order placement after reservation, `/store-dashboard`, dispatch, and agent delivery pages. Store operators are intentionally represented by a minimal explicit demo credential boundary until a production staff identity provider is introduced. Customer cancellation before pickup, delivery completion, and assignment are implemented for local demonstration; payments and production courier workflows remain out of scope.
+The frontend includes `/orders`, `/orders/:orderId`, one-step checkout, and a unified `/store-dashboard` Demo Store workspace. Store operators and the demo-wide dispatcher are intentionally represented by minimal explicit demo credential boundaries until a production staff identity provider is introduced. Customer cancellation before pickup, delivery completion, and assignment are implemented for local demonstration; payments and production courier workflows remain out of scope.
 
 ## Phase 5 — Internal Delivery
 
 Migration `005_create_delivery_management.sql` adds `delivery_agents`, `delivery_dispatchers`, `delivery_tasks`, `delivery_assignments`, and `delivery_status_history`. It is additive and does not modify migrations 001–004 or inventory semantics.
+
+Migrations `006_add_delivered_store_order_status.sql` through `009_add_customer_cancellation_restore.sql` are additive. They add terminal delivery/cancellation support, ETA snapshots, delivery-location history, and exactly-once inventory restoration for eligible customer cancellations; migrations 001–008 are never rewritten.
 
 When an authorized store operator moves a store order to `ready_for_pickup`, one delivery task is created atomically with its pickup and customer-address snapshots. Repeated readiness requests cannot create duplicate tasks. Rejected store orders never create tasks.
 
@@ -1036,7 +1044,8 @@ Controlled `delivery_failed` events preserve a reason, close the active assignme
 Delivery APIs:
 
 - Admin: `POST/GET/PATCH /api/delivery-agents`, `PATCH /api/delivery-agents/:id/availability`
-- Dispatch: `GET /api/dispatch/tasks`, `GET /api/dispatch/tasks/:id`, `POST /api/dispatch/tasks/:id/assign`, `POST /api/dispatch/tasks/:id/reassign`, `GET /api/dispatch/agents`
+- Unified Demo Store: `GET /api/dispatch/store-orders`, `POST /api/dispatch/store-orders/:id/transition`, `POST /api/dispatch/store-orders/:id/confirm-pickup`, and `POST /api/dispatch/tasks/:id/demo-complete`
+- Dispatch internals: `GET /api/dispatch/tasks`, `GET /api/dispatch/tasks/:id`, `POST /api/dispatch/tasks/:id/assign`, `POST /api/dispatch/tasks/:id/reassign`, `GET /api/dispatch/agents`
 - Agent: `GET /api/agent/deliveries`, `GET /api/agent/deliveries/:id`, and the lifecycle transition endpoints under `/api/agent/deliveries/:id/*`
 - Customer: `GET /api/orders/:orderId/deliveries`, `GET /api/deliveries/:id/tracking`
 
@@ -1065,14 +1074,23 @@ demo delivery agent. Demo identities are intentionally local-only:
 - Dispatcher: `demo-dispatcher-admin`
 - Agent: `demo-agent-001`
 
-Customer requests use an `X-Cart-Session` header. The normal demonstration is:
-select a Hyderabad location, search/filter a fashion product, choose an exact
-variant and fulfilment store, add it to the cart, validate and reserve at
-checkout, then create an order. The store operator can accept, prepare, and
-mark the store order ready. The dispatcher assigns the generated delivery task
-to `demo-agent-001`; the agent lifecycle endpoints then advance it through
-pickup, out-for-delivery, and delivered. Customer order detail and tracking are
-REST-authoritative with Socket.IO updates where connected.
+Customer requests use a browser-shared guest session. The browser sends the
+legacy `X-Cart-Session` compatibility header and the backend establishes an
+HttpOnly `catalogue_guest_session` cookie so the same local browser profile can
+see its order history across tabs. The normal demonstration is: select a
+Hyderabad location, search/filter a fashion product, choose an exact variant
+and fulfilment store, add it to the cart, validate the address, and select
+**Place order** once. The final placement transaction allocates inventory,
+creates store fulfilments and immutable ETA snapshots, and removes only the
+purchased cart lines atomically.
+
+Open **Demo Store** with `demo-dispatcher-admin` to accept, prepare, mark ready,
+confirm pickup, and complete an active delivery. Customer order detail is
+REST-authoritative and subscribes to Socket.IO status events. After pickup, the
+customer can open **Track live delivery** for the ETA, partner name, delivery
+progress, and a genuine GPS location only when the assigned agent shares a
+fresh permitted browser location. No map, route, or courier movement is
+fabricated when GPS is absent.
 
 The seeded database currently contains 1,021 products, 1,064 variants, 10
 active demo stores, and 4,188 inventory rows.
