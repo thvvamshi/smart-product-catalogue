@@ -1075,16 +1075,19 @@ demo delivery agent. Demo identities are intentionally local-only:
 - Agent: `demo-agent-001`
 
 If a deployed demo database has the delivery tables but returns
-`DISPATCH_FORBIDDEN` for `demo-dispatcher-admin`, provision only that identity
-(without reseeding stores, stock, carts, or orders) through the deployment's
-approved backend shell:
+`DISPATCH_FORBIDDEN` for `demo-dispatcher-admin` or a Demo Store transition
+returns `DEMO_STORE_OPERATOR_NOT_FOUND`, provision only the known demo
+dispatcher, deterministic demo store-operator mappings, and the documented
+demo delivery agent (without reseeding stores, stock, carts, or orders) through
+the deployment's approved backend shell:
 
 ```bash
-npm run db:provision-demo-dispatcher -w server -- --allow-remote
+npm run db:provision-demo-operations -w server -- --allow-remote
 ```
 
 This is intentionally an explicit operator action. The command upserts only
-the fixed demo dispatcher as an active `admin`; it does not weaken dispatcher
+the fixed demo dispatcher as an active `admin`, `demo-operator-<STORE_CODE>`
+for active demo stores, and `demo-agent-001` when missing. It does not weaken
 authorization or accept arbitrary client identities.
 
 Customer requests use a browser-shared guest session. The browser sends the

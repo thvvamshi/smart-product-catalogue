@@ -10,6 +10,11 @@ export function ProductCard({ product }: { product: Product }) {
   const navigate = useNavigate();
   const [status, setStatus] = useState<"idle" | "loading" | "added" | "error">("idle");
   const [message, setMessage] = useState("");
+  // Production CSP permits only same-origin/data images and the deterministic
+  // seed placeholder origin. Unknown external URLs remain blocked.
+  const imageSource = product.imageUrl && (product.imageUrl.startsWith("/") || product.imageUrl.startsWith("data:image/") || product.imageUrl.startsWith("https://placehold.co/"))
+    ? product.imageUrl
+    : null;
   const add = async () => {
     if (!location || status === "loading" || !product.inStock) return;
     setStatus("loading");
@@ -35,11 +40,7 @@ export function ProductCard({ product }: { product: Product }) {
   return (
     <article className="product-card">
       <div className="image-wrap">
-        <img
-          src={product.imageUrl || "https://placehold.co/600x400?text=Product"}
-          alt=""
-          loading="lazy"
-        />
+        {imageSource ? <img src={imageSource} alt="" loading="lazy" /> : <span className="product-image-placeholder" aria-hidden="true">{product.name.slice(0, 1).toUpperCase()}</span>}
       </div>
       <div className="card-body">
         <div className="eyebrow">

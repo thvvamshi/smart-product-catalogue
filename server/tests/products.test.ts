@@ -11,6 +11,11 @@ describe('product API', () => {
     expect((await request(app).get('/api/health/db')).body.database).toBe('connected');
   });
 
+  it('permits only the seeded placeholder image host in the image CSP', async () => {
+    const response = await request(app).get('/api/health');
+    expect(response.headers['content-security-policy']).toContain("img-src 'self' data: https://placehold.co");
+  });
+
   it.each([
     ['exact/partial name', 'q=Orbit%20Pro', 'CAM-PRO-001'],
     ['description', 'q=lumbar', 'HOME-CHAIR-1'],

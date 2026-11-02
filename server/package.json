@@ -14,7 +14,7 @@
     "db:migrate": "tsx database/migrate.ts",
     "db:seed": "tsx database/seed.ts",
     "db:seed-hyperlocal": "tsx database/seed-hyperlocal.ts",
-    "db:provision-demo-dispatcher": "tsx database/provision-demo-dispatcher.ts",
+    "db:provision-demo-operations": "tsx database/provision-demo-operations.ts",
     "db:seed-fashion": "tsx database/seed-fashion.ts",
     "db:verify-count": "tsx database/verify-product-count.ts",
     "db:verify-hyperlocal": "tsx database/verify-hyperlocal.ts",

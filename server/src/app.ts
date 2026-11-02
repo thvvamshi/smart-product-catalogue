@@ -14,7 +14,15 @@ export const app = express();
 
 app.disable("x-powered-by");
 
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        imgSrc: ["'self'", "data:", "https://placehold.co"],
+      },
+    },
+  }),
+);
 
 app.use(
   cors({
