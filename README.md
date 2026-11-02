@@ -1074,6 +1074,19 @@ demo delivery agent. Demo identities are intentionally local-only:
 - Dispatcher: `demo-dispatcher-admin`
 - Agent: `demo-agent-001`
 
+If a deployed demo database has the delivery tables but returns
+`DISPATCH_FORBIDDEN` for `demo-dispatcher-admin`, provision only that identity
+(without reseeding stores, stock, carts, or orders) through the deployment's
+approved backend shell:
+
+```bash
+npm run db:provision-demo-dispatcher -w server -- --allow-remote
+```
+
+This is intentionally an explicit operator action. The command upserts only
+the fixed demo dispatcher as an active `admin`; it does not weaken dispatcher
+authorization or accept arbitrary client identities.
+
 Customer requests use a browser-shared guest session. The browser sends the
 legacy `X-Cart-Session` compatibility header and the backend establishes an
 HttpOnly `catalogue_guest_session` cookie so the same local browser profile can
